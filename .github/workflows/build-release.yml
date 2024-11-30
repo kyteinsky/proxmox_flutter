@@ -1,0 +1,104 @@
+name: "Build & Release"
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:      
+    name: Build & Release 
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      - name: Extract version from pubspec.yaml
+        id: extract_version
+        working-directory: ./pve_flutter_frontend
+        run: |
+          version=$(grep '^version: ' pubspec.yaml | cut -d ' ' -f 2 | tr -d '\r')
+          echo "VERSION=$version" >> $GITHUB_ENV
+
+      - name: Check if Tag Exists
+        id: check_tag
+        run: |
+          if git rev-parse "v${{ env.VERSION }}" >/dev/null 2>&1; then
+            echo "TAG_EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "TAG_EXISTS=false" >> $GITHUB_ENV
+          fi
+
+      - name: Forfeit if Tag Exists
+        if: env.TAG_EXISTS == 'true'
+        run: |
+          echo "Tag already exists for version ${{ env.VERSION }}. Skipping build."
+          exit 1
+
+      - name: Set Up Java
+        uses: actions/setup-java@v4.5.0
+        with:
+          distribution: 'oracle'
+          java-version: '17'
+
+      - name: Set Up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+          cache-key: "flutter-:os:-:channel:-:version:-:arch:"
+          cache-path: "${{ runner.tool_cache }}/flutter/:channel:-:version:-:arch:"
+          pub-cache-key: "flutter-pub:os:-:channel:-:version:-:arch:"
+          pub-cache-path: "${{ runner.tool_cache }}/flutter/:channel:-:version:-:arch:"
+
+      - name: Turn off analytics
+        run: flutter --disable-analytics
+
+      - name: Upgrade win32
+        working-directory: ./pve_flutter_frontend
+        run: flutter pub upgrade win32
+
+      - name: Build Dependencies
+        run: |
+          cd proxmox_dart_api_client
+          flutter pub get
+          flutter pub run build_runner build --delete-conflicting-outputs
+          cd ../proxmox_login_manager
+          flutter pub get
+          flutter packages pub run build_runner build --delete-conflicting-outputs
+          cd ../pve_flutter_frontend
+          flutter pub get
+          flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: Decode Keystore
+        working-directory: ./pve_flutter_frontend
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore.jks
+
+      - name: Create key.properties
+        working-directory: ./pve_flutter_frontend
+        run: |
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+          echo "storeFile=keystore.jks" >> android/key.properties
+
+      - name: Build APK
+        working-directory: ./pve_flutter_frontend
+        run: flutter build apk --release
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Releases
+          path: |
+            ./pve_flutter_frontend/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "./pve_flutter_frontend/build/app/outputs/flutter-apk/app-release.apk"
+          tag: v${{ env.VERSION }}
+          token: ${{ secrets.TOKEN }}
