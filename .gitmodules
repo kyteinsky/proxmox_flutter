@@ -1,0 +1,9 @@
+[submodule "proxmox_login_manager"]
+	path = proxmox_login_manager
+	url = git://git.proxmox.com/git/flutter/proxmox_login_manager.git
+[submodule "proxmox_dart_api_client"]
+	path = proxmox_dart_api_client
+	url = git://git.proxmox.com/git/flutter/proxmox_dart_api_client.git
+[submodule "pve_flutter_frontend"]
+	path = pve_flutter_frontend
+	url = git://git.proxmox.com/git/flutter/pve_flutter_frontend.git
