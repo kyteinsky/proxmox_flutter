@@ -26,6 +26,7 @@ jobs:
       - name: Check if Tag Exists
         id: check_tag
         run: |
+          set -xe
           if git rev-parse "v${{ env.VERSION }}" >/dev/null 2>&1; then
             echo "TAG_EXISTS=true" >> $GITHUB_ENV
           else
@@ -36,7 +37,7 @@ jobs:
         if: env.TAG_EXISTS == 'true'
         run: |
           echo "Tag already exists for version ${{ env.VERSION }}. Skipping build."
-          exit 1
+          exit 0
 
       - name: Set Up Java
         uses: actions/setup-java@v4.5.0
